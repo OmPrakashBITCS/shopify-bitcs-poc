@@ -1,0 +1,175 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+}
+
+// model AuctionProduct {
+//   id                String   @id
+//   productId         String
+//   productName       String
+//   variantId         String
+//   basePrice         BigInt
+//   incrementBidPrice BigInt
+//   startDate         DateTime
+//   endDate           DateTime
+//   instantBuyAmount  BigInt
+//   platform          String
+//   type              String
+//   vendor            String
+//   quantity          Int
+//   currency          String
+//   auctionStatus     String
+//   numberOfBids      Int
+//   images            ProductImage[]
+//   winners           WinnerUsers[]
+//   participants      UserParticipant[]
+// }
+
+model Auction {
+  id        String    @id @default(uuid())
+  name      String
+  startTime DateTime
+  endTime   DateTime
+  isActive  Boolean?  @default(true)
+  platform  String // Platform from which the API was called, e.g., "shopify" or "postman"
+  productId String
+  status    String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  product   Product[]
+  UserBid   UserBid[]
+  Winner    Winner[]
+}
+
+model Product {
+  id        String    @id @default(uuid())
+  title     String
+  price     Float
+  imageUrl  String
+  variants  Variant[]
+  auctionId String
+  productId String    @unique
+  auction   Auction?  @relation(fields: [auctionId], references: [id])
+  UserBid   UserBid[]
+  Winner    Winner[]
+
+  @@index([auctionId])
+}
+
+model Variant {
+  id             String    @id @default(uuid())
+  title          String
+  variantId      String    @unique
+  price          Float
+  incrementPrice Float
+  product        Product   @relation(fields: [productId], references: [id])
+  productId      String
+  userBids       UserBid[]
+  Winner         Winner[]
+
+  @@index([productId])
+}
+
+model UserBid {
+  id           String   @id @default(uuid())
+  auctionId    String
+  productId    String
+  variantId    String
+  customerId   String
+  customerName String
+  bidAmount    Float
+  bidTime      DateTime @default(now())
+  createdAt    DateTime @default(now())
+  auction      Auction  @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant      Variant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([auctionId, productId, variantId])
+}
+
+model Winner {
+  id           String   @id @default(uuid())
+  auctionId    String
+  productId    String
+  variantId    String
+  customerId   String
+  customerName String
+  bidAmount    Float
+  invoiceId    String?
+  invoiceUrl   String?
+  createdAt    DateTime @default(now())
+  auction      Auction  @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant      Variant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([auctionId, productId, variantId])
+}
+
+// model ProductImage {
+//   id        String  @id @default(uuid())
+//   url       String
+//   auctionId String
+//   auction   AuctionProduct @relation(fields: [auctionId], references: [id])
+
+//   @@index([auctionId])
+// }
+
+// model UserParticipant {
+//   id        String  @id
+//   auctionId String
+//   productId String
+//   variantId String
+//   userId    BigInt
+//   bidAmount BigInt
+//   bidTime   DateTime
+//   auction   AuctionProduct? @relation(fields: [auctionId], references: [id])
+
+//   @@index([auctionId])
+// }
+
+// model WinnerUsers {
+//   id          String  @id
+//   auctionId   String
+//   productId   String
+//   variantId   String
+//   userId      BigInt
+//   bidAmount   BigInt
+//   bidTime     DateTime
+//   isWinner    Boolean
+//   isPaid      Boolean
+//   paidAmount  BigInt
+//   paidTime    DateTime
+//   paidMethod  String
+//   paidStatus  String
+//   auction     AuctionProduct? @relation(fields: [auctionId], references: [id])
+
+//   @@index([auctionId])
+// }

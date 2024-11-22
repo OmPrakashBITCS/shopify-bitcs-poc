@@ -1,0 +1,417 @@
+{% schema %}
+  {
+    "name": "Auction Card",
+    "settings": [
+      {
+        "type": "product",
+        "id": "product",
+        "label": "Select Product",
+        "info": "Choose a product for the auction.",
+        "autofill": true
+      },
+      {
+        "type": "text",
+        "id": "starting_bid",
+        "label": "Starting Bid",
+        "default": "100",
+        "info": "The initial bid amount in your chosen currency."
+      },
+      {
+        "type": "text",
+        "id": "bid_increment",
+        "label": "Bid Increment",
+        "default": "10",
+        "info": "Amount to increment the bid by with each bid."
+      },
+      {
+        "type": "text",
+        "id": "currency",
+        "label": "Currency",
+        "default": "INR",
+        "info": "Currency for displaying prices (e.g., USD, INR)."
+      },
+      {
+        "type": "text",
+        "id": "start-time",
+        "label": "Start Time",
+        "default": "2024-11-10T13:21:00",
+        "info": "The start time of the auction in YYYY-MM-DDTHH:MM:SS format."
+      },
+      {
+        "type": "text",
+        "id": "end_time",
+        "label": "End Time",
+        "default": "2024-11-30T13:21:00",
+        "info": "The end time of the auction in YYYY-MM-DDTHH:MM:SS format."
+      },
+      {
+        "type": "text",
+        "id": "variant_id",
+        "label": "Variant ID",
+        "info": "Enter the Variant ID for the selected product."
+      }
+    ],
+    "target": "section"
+  }
+{% endschema %}
+
+<style>
+
+
+.auction-card {
+  width: 300px;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  padding: 20px;
+  text-align: center;
+  display: none;
+}
+
+.auction-header h3 {
+  font-size: 18px;
+  margin: 0;
+  color: #333;
+}
+
+.time-remaining {
+  font-size: 24px;
+  font-weight: bold;
+  color: #000;
+  margin: 10px 0;
+}
+
+.time-labels span {
+  margin: 0 8px;
+  font-size: 12px;
+  color: #666;
+}
+
+.auction-info {
+  text-align: left;
+  margin-top: 15px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 10px 0;
+}
+
+.bid-input-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 20px 0;
+}
+
+#bid-input {
+  width: 70%;
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+#place-bid-btn {
+  width: 100%;
+  padding: 5px;
+  background-color: #333;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.view-bids-button {
+  width: 100%;
+  padding: 10px;
+  background-color: #333;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+</style>
+{% if customer %}
+<div id="auction-card" class="auction-card">
+  <div class="auction-header" id="auction-header">
+    <h3>Time Remaining</h3>
+    <div id="formatted-time-remaining" class="time-remaining">00 : 00 : 00 : 00</div>
+    <div class="time-labels" id="time-labels">
+      <span>Days</span><span>Hours</span><span>Minutes</span><span>Seconds</span>
+    </div>
+      </div>
+    <div id="auction-status-message"  style="display: none; color: #d9534f; font-weight: bold; margin-top: 10px;"></div>
+
+
+  <div class="auction-info">
+    <div class="info-row">
+      <span>Number of bids</span>
+      <span id="bid-count">0</span>
+    </div>
+    <div class="info-row">
+      <span>Current bid</span>
+      <span id="current-bid">100 INR</span>
+    </div>
+    <div class="info-row">
+      <span>Start price</span>
+      <span id="start-price">100 INR</span>
+    </div>
+    <div class="info-row">
+      <span>Start time</span>
+      <span id="start-time">2024-11-10T13:21:00</span>
+    </div>
+    <div class="info-row">
+      <span>End time</span>
+      <span id="end-time">2024-11-30T13:21:00</span>
+    </div>
+    <div class="info-row">
+      <span>Next minimum bid</span>
+      <span id="next-min-bid">110 INR</span>
+    </div>
+
+    <div class="bid-input-row" id="bid-input-row">
+      <button id="place-bid-btn">Place bid</button>
+    </div>
+  </div>
+
+</div>
+{% else %}
+<p>Please <a href="/account/login?return_url={{ shop.url }}/products/{{ product.handle }}">log in</a> to participate in the auction.</p>
+{% endif %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  let currentUrl = window.location.href;
+  const productId = '{{ product.id }}'
+  const customerId = '{{ customer.id }}'
+  const customerName = '{{ customer.name }}'
+  let variantId = '{{ product.selected_or_first_available_variant.id }}' ?? getVariantIdFromUrl();
+  const auctionCard = document.getElementById('auction-card');
+  const bidCountElement = document.getElementById('bid-count');
+  const currentBidElement = document.getElementById('current-bid');
+  const startPriceElement = document.getElementById('start-price');
+  const startTimeElement = document.getElementById('start-time');
+  const endTimeElement = document.getElementById('end-time');
+  const nextMinBidElement = document.getElementById('next-min-bid');
+  const formattedTimeRemainingElement = document.getElementById('formatted-time-remaining');
+  const bidInput = document.getElementById('bid-input');
+  const placeBidButton = document.getElementById('place-bid-btn');
+  let auctionId = null;
+  const API_URL = 'https://mutual-splendid-quagga.ngrok-free.app'
+
+  let bids = [];
+  let currentBid = parseFloat("100"); 
+  let startPrice = parseFloat("100"); 
+  let startTime = '{{ block.settings.start-time }}';
+  let endTime = '{{ block.settings.end_time }}';
+  let nextMinBid = parseFloat("110");
+  let bidAmount = null;
+  let incrementPrice = null;
+  let reservedPrice = null;
+
+  const productFormButtons = document.querySelectorAll('.product-form__buttons');
+  const dynamicCheckoutButton = document.querySelector('.shopify-payment-button');
+  const quantityInput = document.querySelector('.product-form__quantity');
+  const priceTag = document.querySelector('.price');
+  function showProductButtons() {
+    if (productFormButtons.length > 0) {
+      productFormButtons.forEach(button => {
+        button.style.display = 'block';
+      });
+    }
+    if (dynamicCheckoutButton) {
+      dynamicCheckoutButton.style.display = 'block';
+    }
+    if(quantityInput){
+      quantityInput.style.display = 'block';
+    }
+    if(priceTag){
+      priceTag.style.display = 'block';
+    }
+  }
+
+  function hideProductButtons() {
+    if (productFormButtons.length > 0) {
+      productFormButtons.forEach(button => {
+        button.style.display = 'none';
+      });
+    }
+    if (dynamicCheckoutButton) {
+      dynamicCheckoutButton.style.display = 'none';
+    }
+    if(quantityInput){
+      quantityInput.style.display = 'none'
+    }
+    if(priceTag){
+      priceTag.style.display = 'none'
+    }
+  }
+
+
+  function updateUI() {
+    bidCountElement.textContent = bids.length;
+    currentBidElement.textContent = `${currentBid} INR`;
+    startPriceElement.textContent = `${startPrice} INR`;
+    startTimeElement.textContent = startTime;
+    endTimeElement.textContent = endTime;
+    nextMinBidElement.textContent = `${nextMinBid} INR`;
+  }
+
+  function fetchAuctionData() {
+    fetch(`${API_URL}/api/fetch-auctions`, {headers: { 'Content-Type': 'application/json','Accept': 'application/json','ngrok-skip-browser-warning': 'true' },})
+      .then(response => response.json())
+      .then(data => {
+        console.log("data",data)
+        let flag = false;
+        for(auction of data.auctions){
+          auctionId = auction.id
+          const prodId = auction.productId;
+          if(prodId === productId){
+            startTime = new Date(auction.startTime).toLocaleString();
+            endTime = new Date(auction.endTime).toLocaleString();
+            startPrice = auction.product[0].price;
+            for(variant of auction.product[0].variants) {
+              const vId = variant.variantId
+              if(variantId === vId){
+                flag = true;
+                bids = variant.userBids;
+                if(!bids.length){
+                  currentBid = variant.price;
+                  nextMinBid = variant.price + variant.incrementPrice;
+                }else{
+                  currentBid = variant.price + variant.incrementPrice;
+                  nextMinBid = currentBid + variant.incrementPrice;
+                }
+                
+                incrementPrice = variant.incrementPrice;
+                reservedPrice = variant.reservedPrice;
+              }
+            }
+          }
+        }
+        if (flag) {
+        const now = new Date().getTime();
+        const startTimeDate = formatDate(startTime);
+        const endTimeDate = formatDate(endTime);
+
+        if (now < startTimeDate) {
+          document.getElementById('auction-status-message').textContent = "Auction has not started yet.";
+          document.getElementById('auction-status-message').style.display = "block";
+          document.getElementById('auction-header').style.display = 'none';
+          document.getElementById('bid-input-row').style.display = 'none';
+          document.querySelector('.product-form').style.display = 'none';
+          auctionCard.style.display = 'block';
+          hideProductButtons()
+
+          updateUI();
+        } else if (now > endTimeDate) {
+          document.getElementById('auction-status-message').textContent = "Auction has ended.";
+          document.getElementById('auction-status-message').style.display = "block";
+          document.getElementById('auction-header').style.display = 'none';
+          document.getElementById('auction-input-row').style.display = 'none';
+          auctionCard.style.display = 'block';
+          hideProductButtons()
+
+          updateUI();
+        } else {
+          document.getElementById('auction-status-message').style.display = "none";
+          auctionCard.style.display = 'block';
+          hideProductButtons()
+          updateUI();
+          updateCountdown();
+        }
+      } else {
+        auctionCard.style.display = 'none';
+        showProductButtons()
+      }
+      })
+      .catch(error => {
+        console.error('Error fetching auction data:', error);
+      });
+  }
+
+  placeBidButton.addEventListener("click", async function() {
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/create-bid`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            'ngrok-skip-browser-warning': 'true'
+          },
+          body: JSON.stringify({
+            productId,
+            customerId,
+            auctionId,
+            variantId,
+            customerName,
+            bidAmount: currentBid,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to place bid.");
+      }
+
+      const result = await response.json();
+      console.log("Bid placed successfully:", result);
+      currentBid = nextMinBid;
+      nextMinBid = currentBid + incrementPrice;
+      updateUI();
+    } catch (error) {
+      console.error("Error placing bid:", error);
+    }
+  });
+ function formatDate(time) {
+  const dateString = time;
+    const [datePart, timePart] = dateString.split(", ");
+    const [day, month, year] = datePart.split("/");
+    const [hours, minutes, seconds] = timePart.split(":");
+    const date = new Date(year, month - 1, day, hours, minutes, seconds);
+    const isoString = date.toISOString();
+    const endTimeDate = new Date(isoString).getTime();
+    return endTimeDate;
+ }
+  
+
+  function updateCountdown() {
+    const endTimeDate = formatDate(endTime)
+    setInterval(() => {
+      const now = new Date().getTime();
+      const timeDifference = endTimeDate - now;
+
+      if (timeDifference <= 0) {
+        formattedTimeRemainingElement.textContent = "EXPIRED";
+      } else {
+        const days = String(Math.floor(timeDifference / (1000 * 60 * 60 * 24))).padStart(2, '0');
+        const hours = String(Math.floor((timeDifference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))).padStart(2, '0');
+        const minutes = String(Math.floor((timeDifference % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, '0');
+        const seconds = String(Math.floor((timeDifference % (1000 * 60)) / 1000)).padStart(2, '0');
+
+        formattedTimeRemainingElement.textContent = `${days} : ${hours} : ${minutes} : ${seconds}`;
+      }
+    }, 1000);
+  }
+
+  fetchAuctionData();
+  function getVariantIdFromUrl() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('variant');
+  }
+
+  function checkUrlChange() {
+    if (window.location.href !== currentUrl) {
+      currentUrl = window.location.href;
+      variantId = getVariantIdFromUrl();
+      fetchAuctionData();
+    }
+  }
+  const observer = new MutationObserver(checkUrlChange);
+  observer.observe(document, { subtree: true, childList: true });
+});
+</script>
