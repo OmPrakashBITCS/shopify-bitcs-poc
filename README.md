@@ -368,3 +368,158 @@ This template uses [Remix](https://remix.run). The following Shopify tools are a
 - [App extensions](https://shopify.dev/docs/apps/app-extensions/list)
 - [Shopify Functions](https://shopify.dev/docs/api/functions)
 - [Getting started with internationalizing your app](https://shopify.dev/docs/apps/best-practices/internationalization/getting-started)
+
+
+---
+
+## Initial Server Setup
+
+### SSH Connection
+Connect to your AWS EC2 instance using SSH:
+```bash
+ssh -i ~/.ssh/new_ubnt_rsa om@18.60.200.239
+# OR
+ssh -i ~/.ssh/new_ubnt_rsa om@3.110.160.85
+```
+
+### Switch to Deploy User
+```bash
+sudo su - deploy
+```
+
+## Server Dependencies
+
+### Update System Packages
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y curl wget git build-essential nginx certbot python3-certbot-nginx
+```
+
+### Install Node.js v22.10.0
+```bash
+# Add NodeSource PPA
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+
+# Install Node.js
+sudo apt install -y nodejs
+
+# Verify installation
+node -v
+npm -v
+```
+
+### Install SQLite
+```bash
+sudo apt install -y sqlite3
+sqlite3 --version
+```
+
+### Install Docker (Optional)
+```bash
+sudo apt install -y docker.io docker-compose
+sudo systemctl enable docker
+sudo systemctl start docker
+```
+
+## Repository Setup
+
+### Generate GitHub Token
+1. Visit [GitHub Personal Access Tokens](https://github.com/settings/tokens)
+2. Generate new token with `repo` scope
+3. Save the token securely
+
+### Clone Repository
+```bash
+# Navigate to app directory
+cd ~/app
+
+# Clone using token (Method 1)
+git clone https://<your_github_token>@github.com/<your_username>/<your_repo_name>.git
+
+# OR using environment variable (Method 2)
+export GITHUB_TOKEN="your_token_here"
+git clone https://$GITHUB_TOKEN@github.com/<your_username>/<your_repo_name>.git
+
+# Navigate to project directory
+cd <your_repo_name>
+```
+
+## Environment Configuration
+
+### Create and Configure .env File
+```bash
+nano .env
+```
+
+Add the following configuration:
+```env
+SHOPIFY_API_KEY=9ab0b1ed2719f61ea2970d132e123a99
+SHOPIFY_API_SECRET=9b25ee5f392115ef5b88697173969deb
+SCOPES=read_customers,read_draft_orders,write_draft_orders,write_products
+SHOPIFY_AUCTION_ID=e4b0c67c-9ae4-436b-b722-3370f78acaa9
+ENVIRONMENT=prod
+SHOPIFY_APP_URL=https://ec2-18-60-200-239.ap-south-2.compute.amazonaws.com
+```
+
+## Database Setup
+
+### Run Migrations
+```bash
+# Deploy database migrations
+npx prisma migrate deploy
+
+# Optional: Seed the database
+npx prisma db seed
+```
+
+## Application Deployment
+
+### Install Dependencies and Build
+```bash
+# Install dependencies
+npm ci
+
+# Build the application
+npm run build
+```
+
+## Production Configuration
+
+### Configure and Deploy to Shopify
+```bash
+# Set production configuration
+shopify app config:use prod
+
+# Deploy to Shopify
+shopify app deploy
+
+# Run setup and verify
+npm run setup
+npm run start
+```
+
+## Process Management
+
+### PM2 Setup and Configuration
+```bash
+# Install PM2 globally
+sudo npm install -g pm2
+
+# Start application with PM2
+pm2 start npm --name "shopify-app" -- start
+
+# Save PM2 process list
+pm2 save
+
+# Configure PM2 startup
+pm2 startup
+# Run the command provided by the above command
+```
+
+## Troubleshooting
+
+If you encounter any issues during deployment:
+1. Check the PM2 logs: `pm2 logs shopify-app`
+2. Verify environment variables are properly set
+3. Ensure all required ports are open in your AWS security group
+4. Check Nginx configuration if using a reverse proxy
