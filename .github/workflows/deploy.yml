@@ -18,17 +18,25 @@ jobs:
       with:
         node-version: '22.10.0'
 
-    - name: Install SSH Key
-      uses: webfactory/ssh-agent@v0.5.3
-      with:
-        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+    - name: Add SSH Key and Passphrase
+      run: |
+        mkdir -p ~/.ssh
+        printf "%s" "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        eval "$(ssh-agent -s)"
+        sudo apt-get update && sudo apt-get install -y expect
+        expect <<EOF
+        spawn ssh-add ~/.ssh/id_rsa
+        expect "Enter passphrase for ~/.ssh/id_rsa:"
+        send "${{ secrets.SSH_PASSPHRASE }}\r"
+        interact
+        EOF
+      env:
+        SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
 
     - name: Deploy to AWS EC2
-      env:
-        NODE_ENV: production
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/new_ubnt_rsa om@3.110.160.85 << EOF
+        ssh -o StrictHostKeyChecking=no om@3.110.160.85 << 'EOF'
           sudo su - deploy
           cd app/shopify-bitcs-poc
 
