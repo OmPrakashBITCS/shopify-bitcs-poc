@@ -1,0 +1,80 @@
+name: Deploy Shopify App
+
+on:
+  push:
+    branches:
+      - developer
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '22.10.0'
+
+    - name: Install SSH Key
+      uses: webfactory/ssh-agent@v0.5.3
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+    - name: Deploy to AWS EC2
+      env:
+        NODE_ENV: production
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/new_ubnt_rsa om@3.110.160.85 << EOF
+          sudo su - deploy
+          cd app/shopify-bitcs-poc
+
+          echo "Pulling latest code from the repository..."
+          git pull --rebase
+
+          echo "Installing dependencies..."
+          npm ci
+
+          echo "Applying Prisma migrations..."
+          npx prisma migrate deploy
+
+          echo "Building the app..."
+          npm run build
+
+          echo "Selecting Shopify production configuration..."
+          shopify app config:use prod
+
+          echo "Deploying Shopify app..."
+          shopify app deploy
+
+          echo "Running setup script..."
+          npm run setup
+
+          echo "Restarting PM2 server..."
+          pm2 restart shopify-bitcs-pos || pm2 start npm --name "shopify-bitcs-pos" -- start
+          pm2 save
+          pm2 startup
+        EOF
+
+    - name: Notify Success
+      if: success()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.payload.pull_request.number,
+            body: "Deployment to AWS EC2 completed successfully!"
+          })
+
+    - name: Notify Failure
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.payload.pull_request.number,
+            body: "Deployment failed. Check the logs for details."
+          })
